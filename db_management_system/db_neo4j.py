@@ -32,10 +32,10 @@ class DBNeo4j:
         if not self.__driver:
             raise Neo4jNLIException("No driver initialised!")
 
-        # TRY CALL db.schema.nodeTypes...()
-
-        session = None
-        nodes, relationships = [], []
+        self.schema = {
+            "nodes": [],
+            "relationships": [],
+        }
 
         session = self.__driver.session()
 
@@ -48,7 +48,7 @@ class DBNeo4j:
 
         # Parse schema data for node data
         for node_name in set(schema_nodes):
-            nodes.append(Node(node_name))
+            self.schema["nodes"].append(Node(node_name))
             # result = session.run(f"MATCH(n:{node_name}) UNWIND keys(n) AS keys RETURN DISTINCT keys")
             # node_props = [prop["keys"] for prop in result.data()]
             # node = Node(node_name, node_props)
@@ -59,7 +59,7 @@ class DBNeo4j:
             relationship_name = each[1]
             node_source = each[0]
             node_target = each[2]
-            relationships.append(Relationship(relationship_name, node_source, node_target))
+            self.schema["relationships"].append(Relationship(relationship_name, node_source, node_target))
             # result = session.run(f"MATCH({node_target})<-[r:{relationship_name}]-({node_source}) UNWIND keys(r) AS keys RETURN DISTINCT keys")
             # relationship_props = [prop["keys"] for prop in result.data()]
             # relationship = Relationship(relationship_name, node_source, node_target, relationship_props)
@@ -69,7 +69,7 @@ class DBNeo4j:
             node_type_properties = self.query("CALL db.schema.nodeTypeProperties()")
             #print(node_type_properties)
 
-            for node in nodes:
+            for node in self.schema["nodes"]:
                 # Find node label in node_type_properties
                 # Get list of all instances in node_type_properties and remove them from node_type_properties
                 # Iterate list and add them to node
@@ -81,7 +81,7 @@ class DBNeo4j:
             rel_type_properties = self.query("CALL db.schema.relTypeProperties()")
             #print(rel_type_properties)
 
-            for rel in relationships:
+            for rel in self.schema["relationships"]:
                 for each in rel_type_properties:
                     prop_name = each["propertyName"]
                     if prop_name and rel.name == each["relType"][2:-1]:
@@ -94,8 +94,6 @@ class DBNeo4j:
         #         session.close()
 
         if session: session.close()
-
-        self.schema = {"nodes": nodes, "relationships": relationships}
 
     # TODO issue found: Different results
     def query(self, cypher_query):
