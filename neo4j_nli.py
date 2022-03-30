@@ -1,9 +1,15 @@
+from spacy.tokens.doc import Doc as spacy_Doc
+from spacy.tokens import Token as spacy_Token
+from spacy.tokens.span import Span as spacy_Span
+from typing import Union, Tuple
+
 from db_management_system.db_neo4j import DBNeo4j
+from db_management_system.types import Command, Node, Relationship, Property, Parameter
 from query_creator.cypher_query import CypherQuery
 import config
 
-# new imports
-from interpreter.nl_interpreter import NLInterpreter
+# # new imports
+# from interpreter.nl_interpreter import NLInterpreter
 
 nlp = config.nlp
 
@@ -53,10 +59,7 @@ NOUN_SIMILARITY_THRESHOLD = 0.75
 #         return self.phrase.text.lower().replace(self.noun.text.lower(), self.noun.text.upper())
 
 
-def split_camel_case(word):
-    """Takes as input type class spacey.tokens.token.Token
-    Returns list of words (type=str) contained inside original word
-    Returns None if not camelCase"""
+def split_camel_case(word: spacy_Token) -> Union[list, None]:
     if word.is_lower or word.is_upper: return None  # fixes ["R", "E", "V", "E", "I", "W"]
 
     words = []  # Will contain every each separated word
@@ -79,7 +82,148 @@ def split_camel_case(word):
     return words
 
 
-def process_text(text):
+class Word:
+    def __init__(self, token: spacy_Token):
+        self.token = token
+        self.dbMatch = None
+        self.type = "?"
+        # if self.word.pos_ in ["NOUN", "PROPN"]:
+        #     self.type = "N"  # TMP "N" should indicate NODE not NOUN!
+
+        # new
+        self.dbRole = None
+
+    def set_command(self, command: Command) -> None:
+        self.dbRole = command
+        self.type = "C"
+
+    def set_node(self, node: Node) -> None:
+        self.dbRole = node
+        self.type = "N"
+
+    def set_relationship(self, relationship: Relationship) -> None:
+        self.dbRole = relationship
+        self.type = "R"
+
+    def set_property(self, property: Property) -> None:
+        self.dbRole = property
+        self.type = "P"
+
+    def set_parameter(self, parameter: Parameter) -> None:
+        self.dbRole = parameter
+        self.type = "p"
+
+    def __str__(self):
+        return self.token.text
+
+    def __repr__(self):
+        return f"[{self.token.i} {self.token}]"
+
+
+class SentenceChunk:
+    def __init__(self, chunk: spacy_Span, chunk_index: int):
+        self.index = chunk_index
+        self.words = []
+
+        self.nounIndex = None  # WARNING: is it possible to have more than one noun that wasn't merged in processing?
+        for i, word in enumerate(chunk):
+            w = Word(word)
+            self.words.append(w)
+            if chunk.root == word and chunk.root.pos_ in SPACY_NOUN_POS_TAGS:
+                self.nounIndex = i
+
+        #self.dbRole: Union[Node, Relationship, Property, Parameter, None] = None
+        # TODO Place within words not chunk!
+
+    def get_noun(self) -> Word:
+        if self.nounIndex is None:
+            raise Exception("WARNING CANNOT SET PROPERTY ON CHUNK WITHOUT NOUN")
+        return self.words[self.nounIndex]
+
+    def set_command(self, command: dict) -> None:
+        self.words[command["idx_start"]].type = "C"
+        self.command = command["cypher"]  # TODO
+
+    # def set_property(self, property: Property) -> None:
+    #     self.get_noun().type = "P"
+    #     self.dbRole = property
+    #
+    # def set_parameter(self, something): pass  # TODO
+    #
+    # def set_rela_property(self, rela_labels: list, property) -> None:  # TODO property: Property?
+    #     # self.get_noun().type = "R"
+    #     # self.relationshipLabels = rela_labels
+    #     # self.property = property
+    #     pass
+    #
+    # def set_node(self, node: Node) -> None:
+    #     self.get_noun().type = "N"
+    #     self.dbRole = node
+    #
+    # def set_relationship(self, relationship: Relationship) -> None:
+    #     pass
+
+    def __str__(self):
+        return str(self.words)  #" ".join([self.words.__str__()])
+
+    def __repr__(self):
+        return str(self.index) + str(self.words)
+
+
+class Sentence:
+    def __init__(self, doc: spacy_Doc):
+        self.doc = doc
+        self.chunks = []
+
+        # Include non-noun chunks in chunks
+        chunks = list(self.doc.noun_chunks)
+
+        # Filter out unwanted noun phrases
+        for each in chunks:
+            if each.root.pos_ not in SPACY_NOUN_POS_TAGS: chunks.remove(each)
+
+        assert(len(chunks) > 0)
+
+        sentence_in_chunks = [chunks[0]]
+        for index, chunk in enumerate(chunks[1:]):
+            idx_this_start = chunk[0].i
+            idx_prev_end = chunks[index][-1].i
+            between_chunk = self.doc[idx_prev_end+1:idx_this_start]
+            if between_chunk:
+                sentence_in_chunks.append(between_chunk)
+            sentence_in_chunks.append(chunk)
+
+        for chunk_index, chunk in enumerate(sentence_in_chunks):
+            self.chunks.append(SentenceChunk(chunk, chunk_index))
+
+    def __str__(self):
+        """Visualise sentence and it's components"""
+        string = ""
+
+        word_types = " " * (len(self.doc.text) + 1)
+        chunk_idx = " " * (len(self.doc.text) + 1)
+        for nc in self.chunks:
+            for word in nc.words:
+                idx_start = word.token.idx
+                idx_end = word.token.idx + len(word.token)
+                string_to_insert = word.type + ("_" * (idx_end - idx_start - 1))
+                word_types = word_types[:idx_start] + string_to_insert + word_types[idx_end + 1:]
+
+            idx_start = nc.words[0].token.idx
+            idx_end = nc.words[-1].token.idx + len(nc.words[-1].token)
+            number = str(nc.index)
+            string_to_insert = number + "_" * (idx_end - idx_start - len(number))  # TODO bug here if len(number) > ...
+            chunk_idx = chunk_idx[:idx_start] + string_to_insert + chunk_idx[idx_end+1:]
+
+        string += "Chunks: " + str(self.chunks) + "\n"
+        string += "Sentence     (doc): " + str(self.doc) + "\n"
+        string += "Word Types (N/E/A): " + word_types + "\n"
+        string += "Chunk Index       : " + chunk_idx + "\n"
+
+        return string
+
+
+def process_text(text: str) -> Sentence:
     """Splits text into tokens"""
     doc = nlp(text)
 
@@ -138,143 +282,27 @@ def process_text(text):
     return sentence  # TODO mutliple sentences...
 
 
-class Word:
-    def __init__(self, word):
-        self.word = word
-        self.type = "?"
-        # if self.word.pos_ in ["NOUN", "PROPN"]:
-        #     self.type = "N"  # TMP "N" should indicate NODE not NOUN!
-
-    def __str__(self):
-        return self.word.text
-
-    def __repr__(self):
-        return f"[{self.word.i} {self.word}]"
-
-
-class SentenceChunk:
-    def __init__(self, chunk, chunk_index):
-        self.index = chunk_index
-        self.words = []
-
-        self.nounIndex = None  # WARNING: is it possible to have more than one noun that wasn't merged in processing?
-        for i, word in enumerate(chunk):
-            w = Word(word)
-            self.words.append(w)
-            if chunk.root == word and chunk.root.pos_ in SPACY_NOUN_POS_TAGS:
-                self.nounIndex = i
-
-        self.command = None
-        self.nodeLabels = None
-        self.relationship = None
-        self.property = None
-
-        # TODO Nodes, Relationships, (Node-/Relationship) Properties, (Node-/Relationship) Parameters
-
-    def get_noun(self):
-        if self.nounIndex is None:
-            raise Exception("WARNING CANNOT SET PROPERTY ON CHUNK WITHOUT NOUN")
-        return self.words[self.nounIndex]
-
-    def set_command(self, command):
-        self.words[command["idx_start"]].type = "C"
-        self.command = command["cypher"]
-
-    def set_node_property(self, node_labels, property):
-        assert(type(node_labels == list))
-        self.get_noun().type = "P"
-        self.nodeLabels = node_labels
-        self.property = property
-
-    def set_rela_property(self, rela_labels, property):
-        assert(type(rela_labels) == list)
-        # self.get_noun().type = "R"
-        # self.relationshipLabels = rela_labels
-        # self.property = property
-
-    def set_node(self, node_labels):
-        assert(type(node_labels == list))
-        self.get_noun().type = "N"
-        self.nodeLabels = node_labels
-
-    def __str__(self):
-        return str(self.words)  #" ".join([self.words.__str__()])
-
-    def __repr__(self):
-        return str(self.index) + str(self.words)
-
-
-class Sentence:
-    def __init__(self, doc):
-        self.doc = doc
-        self.chunks = []
-
-        # Include non-noun chunks in chunks
-        chunks = list(self.doc.noun_chunks)
-
-        # Filter out unwanted noun phrases
-        for each in chunks:
-            if each.root.pos_ not in SPACY_NOUN_POS_TAGS: chunks.remove(each)
-
-        assert(len(chunks) > 0)
-
-        sentence_in_chunks = [chunks[0]]
-        for index, chunk in enumerate(chunks[1:]):
-            idx_this_start = chunk[0].i
-            idx_prev_end = chunks[index][-1].i
-            between_chunk = self.doc[idx_prev_end+1:idx_this_start]
-            if between_chunk:
-                sentence_in_chunks.append(between_chunk)
-            sentence_in_chunks.append(chunk)
-
-        for chunk_index, chunk in enumerate(sentence_in_chunks):
-            self.chunks.append(SentenceChunk(chunk, chunk_index))
-
-    def __str__(self):
-        """Visualise sentence and it's components"""
-        string = ""
-
-        word_types = " " * (len(self.doc.text) + 1)
-        chunk_idx = " " * (len(self.doc.text) + 1)
-        for nc in self.chunks:
-            for word in nc.words:
-                idx_start = word.word.idx
-                idx_end = word.word.idx + len(word.word)
-                string_to_insert = word.type + ("_" * (idx_end - idx_start - 1))
-                word_types = word_types[:idx_start] + string_to_insert + word_types[idx_end + 1:]
-
-            idx_start = nc.words[0].word.idx
-            idx_end = nc.words[-1].word.idx + len(nc.words[-1].word)
-            number = str(nc.index)
-            string_to_insert = number + "_" * (idx_end - idx_start - len(number))  # TODO bug here if len(number) > ...
-            chunk_idx = chunk_idx[:idx_start] + string_to_insert + chunk_idx[idx_end+1:]
-
-        string += "Chunks: " + str(self.chunks) + "\n"
-        string += "Sentence     (doc): " + str(self.doc) + "\n"
-        string += "Word Types (N/E/A): " + word_types + "\n"
-        string += "Chunk Index       : " + chunk_idx + "\n"
-
-        return string
-
-
 class Neo4JNLI:
-    def __init__(self, database_uri, database_username, database_password):
+    def __init__(self, database_uri: str, database_username: str, database_password: str):
         self.db = DBNeo4j(database_uri, database_username, database_password)
         #self.db = None  # to speed up init phase
 
-    def find_match_in_db_schema(self, target_word, target_type):
+    @staticmethod
+    def find_match(target_word: Word, target_list: list[Union[Node, Relationship]]) -> Union[Node, Relationship, Property, None]:
         best_match = None
 
+        target_token = target_word.token
+
         similarity_matrix = []
-        for each in self.db.schema[target_type]:
-            similarity = target_word.similarity(each.namesReadable)
+        for each in target_list:
+            similarity = target_token.similarity(each.namesReadable)
             if similarity >= NOUN_SIMILARITY_THRESHOLD:
                 similarity_matrix.append(
                     {"similarity": similarity, "match": each, "match_prop": None}
                 )
 
-            for prop in each.props:
-                similarity = target_word.similarity(nlp(prop))
+            for prop in each.properties:
+                similarity = target_token.similarity(nlp(prop.name))
                 if similarity >= NOUN_SIMILARITY_THRESHOLD:
                     similarity_matrix.append(
                         {"similarity": similarity, "match": each, "match_prop": prop}
@@ -289,9 +317,13 @@ class Neo4JNLI:
                 if (similarity_matrix[0]["similarity"] == similarity_matrix[1]["similarity"]) \
                         and (similarity_matrix[1]["match_prop"] is not None):
                     best_match = similarity_matrix[1]
-        return best_match
 
-    def find_property_value_in_db(self, value):
+            if best_match["match_prop"]: return best_match["match_prop"]
+            elif best_match["match"]: return best_match["match"]
+
+        return None
+
+    def find_property_value_in_db(self, value: str) -> Union[Tuple[dict, dict], Tuple[None, None]]:
         """Value is string"""
         query = f"""
 WITH '{value}' AS property
@@ -317,58 +349,64 @@ END
         property_name = result[0]["property_name"]
         node_labels = result[0]["node_labels"]
 
-        valid_node_label = next((n for n in self.db.schema["nodes"] if n.name in node_labels), None)
+        valid_node_label = next((n for n in self.db.schema.nodes if n.label in node_labels), None)
         if not valid_node_label:
             return None, None
 
         # Check if node exists in database schema
         return node_labels, property_name
 
-    def get_graph_components(self, sentence):
+    def get_graph_components(self, sentence: Sentence) -> None:
         for index, chunk in enumerate(sentence.chunks):
             if chunk.nounIndex is not None:
-                target_word = chunk.get_noun().word
+                target_word: Word = chunk.get_noun()
 
                 # 1. Find in db schema
-                best_match = self.find_match_in_db_schema(target_word, target_type="nodes")
-                if best_match:
-                    if best_match["match_prop"] is not None:
-                        chunk.set_node_property([best_match["match"]], best_match["match_prop"])
-                    else:
-                        chunk.set_node([best_match["match"]])
-                    continue
+                match = self.find_match(target_word, self.db.schema.nodes)
+                if isinstance(match, Node):
+                    target_word.set_node(match)
+                elif isinstance(match, Property):
+                    target_word.set_property(match)
+                continue
 
-                # 2. Find as/in db instance
-                node_labels, property_name = self.find_property_value_in_db(target_word)
-                if node_labels and property_name:
-                    #print("FOUND TARGET WORD", target_word, "AS PROPERTY", property_name, "FOR NODE", node_labels)
-                    chunk.set_node_property(node_labels, property_name)
+                # 2. Find as/in db instance TODO
+                # node_labels, property_name = self.find_property_value_in_db(str(target_word))
+                # if node_labels and property_name:
+                #     #print("FOUND TARGET WORD", target_word, "AS PROPERTY", property_name, "FOR NODE", node_labels)
+                #     parameter = Parameter()
+                #     chunk.set_parameter(parameter)
 
                 # Check if attribute
                 # MATCH (n) WHERE EXISTS(n.address) RETURN DISTINCT labels(n) AS node_types, COUNT(*) AS count
             else:
                 # Check for relationships
-                target_word = chunk.words[0].word  # TODO what goes here?
-                print("Checking chunk for relationships:", chunk)
+                target_word: Word = chunk.words[0]  # TODO what goes here?
 
                 # Check if in schema (Relationship)
-                best_match = self.find_match_in_db_schema(target_word, target_type="relationships")
-                if best_match:
-                    if best_match["match_prop"] is not None:
-                        print("FOUND RELATIONSHIP PROPERTY", chunk, target_word.word.upper())
-                    else:
-                        print("FOUND RELATIONSHIP", chunk, target_word.word.upper())
-                    continue
+                match = self.find_match(target_word, self.db.schema.relationships)
+                if isinstance(match, Relationship):
+                    target_word.set_relationship(match)
+                elif isinstance(match, Property):
+                    target_word.set_property(match)
+                continue
+                # TODO
+                # if best_match:
+                #     if best_match["match_prop"] is not None:
+                #         print("FOUND RELATIONSHIP PROPERTY", chunk, target_word.text.upper())
+                #     else:
+                #         print("FOUND RELATIONSHIP", chunk, target_word.text.upper())
+                #     continue
 
                 # Check if relationship property value
                 pass
 
-    def run(self):
+    def run(self) -> None:
         queries = [
             "How many Businesses that are Breweries are in Phoenix?",
             "How many stars does Mother Bunch Brewing have?",
             "How many Cities?",
-            "City"
+            "City",
+            "How many businesses are in the category breweries?"
         ]
 
         while queries:
@@ -384,7 +422,7 @@ END
             for chunk in sentence.chunks:
                 pass
 
-    def close(self):
+    def close(self) -> None:
         if self.db: self.db.close()
 
 
