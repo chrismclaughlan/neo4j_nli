@@ -52,14 +52,48 @@ def process_text(text: str) -> spacy_Doc:
 
 
 class Command:
-    def __init__(self, text: str):
-        self.text = text
+
+    # Translations from natural language phrase into CYPHER commands
+    # TODO replace todos!
+    translations = (
+        {
+            "text": "how many",
+            "as_node": "COUNT",
+            "as_prop": "SUM",
+        },
+        {
+            "text": "highest",
+            "as_node": "ORDER BY % DESC",
+            "as_prop": "TODO",
+        },
+        {
+            "text": "lowest",
+            "as_node": "ORDER BY",
+            "as_prop": "TODO",
+        },
+        {
+            "text": "average",
+            "as_node": "AVG",
+            "as_prop": "TODO",
+        },
+    )
+
+    def __init__(self, cypher_dict: dict):
+        self.cypher_dict = cypher_dict
+        self.visualisationChar = "C"
+
+    def __str__(self): return str(self.cypher_dict)
+
+    def __repr__(self): return str(self.cypher_dict)
 
 
 class Property:
     def __init__(self, name: str, parent):
         self.name = name
         self.parent = parent
+        self.visualisationChar = "P"
+
+    def __str__(self): return self.name
 
     def __repr__(self): return self.name
 
@@ -71,6 +105,7 @@ class Parameter:
     def __init__(self, value: str, parent: Property):
         self.value = value
         self.parent = parent
+        self.visualisationChar = "p"
 
 
 class BaseClass:
@@ -100,6 +135,7 @@ class Node(BaseClass):
     def __init__(self, label: str, props: list[str] = None):
         self.label = label
         super().__init__(label, props)
+        self.visualisationChar = "N"
 
     def __eq__(self, other):
         return isinstance(other, Node) and self.label == other.label
@@ -119,6 +155,7 @@ class Relationship(BaseClass):
     def __init__(self, type: str, source: str, target: str, props: list[str] = None):
         self.type = type
         super().__init__(type, props)
+        self.visualisationChar = "R"
         
         self.nodeSource = source
         self.nodeTarget = target
