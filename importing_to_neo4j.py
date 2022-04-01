@@ -1,3 +1,5 @@
+"""GIVEN BY TINA B."""
+
 from neo4j import GraphDatabase
 
 class Neo4j_connection: #neo4jconnection #used to be COnnect2Neo4j

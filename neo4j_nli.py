@@ -8,49 +8,21 @@ from db_management_system.types import Command, Node, Relationship, Property, Pa
 from query_creator.cypher_query import CypherQuery
 import config
 
-# # new imports
-# from interpreter.nl_interpreter import NLInterpreter
-
 nlp = config.nlp
-
 
 SPACY_NOUN_POS_TAGS = ["NOUN", "PROPN"]
 
 NOUN_SIMILARITY_THRESHOLD = 0.75
 
 
-# class NounPhrase:
-#     def __init__(self, phrase):
-#         self.noun = phrase.root                                 # token
-#         self.nounType = self.noun.pos_                          # string
-#         self.context = phrase.text.replace(self.noun.text, "")  # string
-#         self.phrase = phrase                                    # span?
-#
-#         self.command = ""
-#         for command in COMMANDS:
-#             if command[0] in self.context.lower():
-#                 self.command = command[1]
-#                 break
-#
-#         # WIP
-#         self.phraseIsInstance = False
-#         self.nounIsInSchema = False
-#
-#     def __str__(self): return self.phrase.text
-#
-#     def __repr__(self):
-#         """Highlights noun in phrase as UPPERCASE"""
-#         return self.phrase.text.lower().replace(self.noun.text.lower(), self.noun.text.upper())
+def split_camel_case(word: spacy_Token) -> Union[list[str], None]:
+    if word.is_lower or word.is_upper: return None  # word.is_upper fixes case: ["R", "E", "V", "E", "I", "W"]
 
-
-def split_camel_case(word: spacy_Token) -> Union[list, None]:
-    if word.is_lower or word.is_upper: return None  # fixes ["R", "E", "V", "E", "I", "W"]
-
-    words = []  # Will contain every each separated word
-    text = word.text
+    words: list[str] = []  # Will contain every each separated word
+    text: str = word.text
 
     # Create new word for every capital letter found in word. Exception being words containing "."
-    current_word = text[0]
+    current_word: str = text[0]
     for letter in text[1:]:
         if not letter.istitle() or current_word[-1] == ".":
             current_word += letter
@@ -61,59 +33,26 @@ def split_camel_case(word: spacy_Token) -> Union[list, None]:
             current_word = letter
     words.append(current_word)
 
-    if len(words) == 1: return None  # Occurs when eg. word == "What"
+    # if len(words) == 1: return None  # Occurs when eg. word == "What"
+    #
+    # return words
 
-    return words
-
-
-# class Word:
-#     def __init__(self, token: spacy_Token):
-#         self.token = token
-#         self.dbMatch = None
-#         self.type = "?"
-#         # if self.word.pos_ in ["NOUN", "PROPN"]:
-#         #     self.type = "N"  # TMP "N" should indicate NODE not NOUN!
-#
-#         # new
-#         self.dbRole = None
-#
-#     def set_command(self, command: Command) -> None:
-#         self.dbRole = command
-#         self.type = "C"
-#
-#     def set_node(self, node: Node) -> None:
-#         self.dbRole = node
-#         self.type = "N"
-#
-#     def set_relationship(self, relationship: Relationship) -> None:
-#         self.dbRole = relationship
-#         self.type = "R"
-#
-#     def set_property(self, property: Property) -> None:
-#         self.dbRole = property
-#         self.type = "P"
-#
-#     def set_parameter(self, parameter: Parameter) -> None:
-#         self.dbRole = parameter
-#         self.type = "p"
-#
-#     def __str__(self):
-#         return self.token.text
-#
-#     def __repr__(self):
-#         return f"[{self.token.i} {self.token}]"
+    return words if len(words) > 1 else None  # None occurs when eg. word == "What"
 
 
 class Span:
-    def __init__(self, span):
+    def __init__(self, span: spacy_Span):
         self.span: spacy_Span = span
+
+        self.children: list[Span] = []  # new
+
         self.spanL: Union[Span, None] = None
         self.spanR: Union[Span, None] = None
 
-        self.match = None
-        self.matchTried = False
+        self.match: Union[Command, Node, Relationship, Property, Parameter, None] = None
+        self.matchTried: bool = False
 
-        self.numNouns = 0
+        self.numNouns: int = 0
         for token in span:
             if token.pos_ in SPACY_NOUN_POS_TAGS:
                 self.numNouns += 1
@@ -127,54 +66,66 @@ class Span:
     def __repr__(self):
         return self.span.text
 
-    def get_match_char(self):
+    def get_match_char(self) -> str:
         if self.match: return self.match.visualisationChar
         else: return "?"
 
+    def get_all_spans(self) -> list['Span']:
+        """Returns itself if no children, otherwise return children"""
+        if not self.children: return [self]
 
-    @staticmethod
-    def get_all_spans(span):
-        all_spans = []
-
-        if span.spanL and span.spanR:
-            all_spans.extend(Span.get_all_spans(span.spanL))
-            all_spans.extend(Span.get_all_spans(span.spanR))
-        else:
-            all_spans.append(span)
-        # if span.span:
-        #     all_spans.append(span)
-        # else:
-        #     all_spans.extend(Span.get_all_spans(span.spanL))
-        #     all_spans.extend(Span.get_all_spans(span.spanR))
+        all_spans: list[Span] = []
+        for child in self.children:
+            all_spans.extend(child.get_all_spans())
         return all_spans
 
-    def split(self):
-        if not self.span:
-            #print("CANNOT SPLIT SPAN: NO SPAN TO SPLIT!")
-            return False
+    def split(self) -> bool:  # TODO Split context from nouns first! Then start splitting nouns. Eg. "How many Wind Mills..." to ["How many", "Wind Mills"]
+        """Returns True if span was split, otherwise False."""
 
         if len(self.span) < 2:
-            #print("CANNOT SPLIT SPAN: SPAN LEN < 2")
             return False
+        elif len(self.span) == 2:
+            self.children.append(Span(self.span[:1]))
+            self.children.append(Span(self.span[1:]))
+            return True
 
-        if len(self.span) == 2:
-            span1 = self.span[:1]
-            span2 = self.span[1:]
+        new_spans_t: list[list[spacy_Token]] = [[self.span[0]]]  # list of new spans wher they are lists of tokens (not spacy_Span yet!)
+        if self.numNouns > 0:
+
+            for token in self.span[1:]:
+
+                if token.pos_ in SPACY_NOUN_POS_TAGS:
+                    if new_spans_t[-1][-1].pos_ in SPACY_NOUN_POS_TAGS:
+                        new_spans_t[-1].append(token)
+                    else:
+                        new_spans_t.append([token])
+                else:
+                    if new_spans_t[-1][-1].pos_ not in SPACY_NOUN_POS_TAGS:
+                        new_spans_t[-1].append(token)
+                    else:
+                        new_spans_t.append([token])
         else:
-            root = self.span.root
-            noun_index = []
-            for token in self.span:
-                noun_index.append(token.i)
-            nii = noun_index.index(root.i)
-            range1 = noun_index[:nii]
-            range2 = noun_index[nii:]
-            span1 = self.span.doc[range1[0]:range1[-1] + 1]
-            span2 = self.span.doc[range2[0]:range2[-1] + 1]
+            # Split span at span root
+            if self.span[0] == self.span.root:
+                new_spans_t.append([token for token in self.span[1:]])
+            else:
+                for index, token in enumerate(self.span[1:]):
+                    index += 1  # compentate for shifting list by 1
 
-        self.spanL = Span(span1)
-        self.spanR = Span(span2)
-        self.span = None
+                    if token == self.span.root:
+                        new_spans_t.append([token for token in self.span[index:]])
+                        break
+                    else:
+                        new_spans_t[-1].append(token)
+
+        for each in new_spans_t:
+            start_i: int = each[0].i
+            end_i: int = each[-1].i
+            new_span: spacy_Span = self.span.doc[start_i:end_i+1]
+            self.children.append(Span( new_span ))
+
         return True
+
 
 
 class Sentence:
@@ -187,22 +138,32 @@ class Sentence:
         # Filter out unwanted noun phrases
         for each in chunks:
             if each.root.pos_ not in SPACY_NOUN_POS_TAGS: chunks.remove(each)
-        assert(len(chunks) > 0)
-        sentence_in_chunks = [chunks[0]]
-        for index, chunk in enumerate(chunks[1:]):
-            idx_this_start = chunk[0].i
-            idx_prev_end = chunks[index][-1].i
-            between_chunk = self.doc[idx_prev_end+1:idx_this_start]
-            if between_chunk:
-                sentence_in_chunks.append(between_chunk)
-            sentence_in_chunks.append(chunk)
-        for chunk in sentence_in_chunks:
-            self.spans.append(Span(chunk))
 
-    def get_all_spans(self):
+        if len(chunks) > 0:
+            sentence_in_chunks = [chunks[0]]
+            for index, chunk in enumerate(chunks[1:]):
+                idx_this_start = chunk[0].i
+                idx_prev_end = chunks[index][-1].i
+                between_chunk = self.doc[idx_prev_end+1:idx_this_start]
+                if between_chunk:
+                    sentence_in_chunks.append(between_chunk)
+                sentence_in_chunks.append(chunk)
+            for chunk in sentence_in_chunks:
+                self.spans.append(Span(chunk))
+        else:
+            # No noun chunks, make just one big span!
+            self.spans = [Span(doc[::])]
+
+    def get_all_spans(self) -> list[Span]:
         all_spans = []
+
+        assert(len(self.spans) > 0)
+
+        # if len(self.spans) == 1:
+        #     return self.spans[0].get_all_spans()
+
         for span in self.spans:
-            all_spans.extend(Span.get_all_spans(span))
+            all_spans.extend(span.get_all_spans())
         return all_spans
 
     def __str__(self):
@@ -212,11 +173,11 @@ class Sentence:
         all_spans = self.get_all_spans()
 
         for i, s in enumerate(all_spans):
-            string += str(i) + ("_" * (len(s.span.text)))
+            string += str(i) + ("_" * (len(s.span.text) - 1)) + " "
         string += "\n"
 
         for s in all_spans:
-            string += s.get_match_char() + ("_" * (len(s.span.text)))
+            string += s.get_match_char() + ("_" * (len(s.span.text) - 1)) + " "
         string += "\n"
 
         return string
@@ -342,13 +303,19 @@ END
             "How many Businesses that are Breweries are in Phoenix?",
             "How many stars does Mother Bunch Brewing have?",
             "How many businesses are in the category Breweries?",
+            # "How many Wind Mills are there in the US?",
+            # "How is that even possible?",
         ]
 
         while queries:
             natural_language_query = queries.pop()
             sentence = process_text(natural_language_query)
             cypher_query = CypherQuery()
+            iteration_no = 1
             while True:
+                # print(iteration_no)
+                # print(sentence)
+                iteration_no+=1
                 # Get all sub-spans
                 all_spans = sentence.get_all_spans()
 
@@ -384,6 +351,6 @@ END
 
 
 if __name__ == "__main__":
-    nli = Neo4JNLI("bolt://localhost:7687", "username", "password")
+    nli = Neo4JNLI("bolt://localhost:7687", "neo4j", "password")  # username = neo4j or username
     nli.run()
     nli.close()
