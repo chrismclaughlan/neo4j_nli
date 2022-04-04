@@ -111,14 +111,14 @@ class DBNeo4j:
         if session: session.close()
 
     # TODO issue found: Different results
-    def query(self, query_text: str) -> list[dict]:
+    def query(self, query_text: str, parameters: dict = None) -> list[dict]:
         if not self.__driver:
             raise Exception("No driver initialised!")
 
         session, result = None, None
         try:
             session = self.__driver.session()
-            result = session.run(query_text).data()
+            result = session.run(query_text, parameters=parameters).data()
         except ServiceUnavailable as e:
             raise Neo4jNLIException("Service Unavailable", is_fatal=False, exception=e)
         except CypherSyntaxError as e:
