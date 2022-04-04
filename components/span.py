@@ -2,12 +2,12 @@ from spacy.tokens.doc import Doc as spacy_Doc
 from spacy.tokens import Token as spacy_Token
 from spacy.tokens.span import Span as spacy_Span
 from typing import Union, Tuple
-from db_management_system.types import Command, Node, Relationship, Property, Parameter
+from db_management_system.types import Match, Command, Node, Relationship, Property, Parameter
 from config import SPACY_NOUN_POS_TAGS
 
 
 class Span:
-    def __init__(self, span: spacy_Span):
+    def __init__(self, span: spacy_Span, matches: list[Match] = None):
         self.span: spacy_Span = span
 
         self.children: list[Span] = []  # new
@@ -15,7 +15,7 @@ class Span:
         self.spanL: Union[Span, None] = None
         self.spanR: Union[Span, None] = None
 
-        self.match: Union[Command, Node, Relationship, Property, Parameter, None] = None
+        self.matches: list[Match] = matches if matches else []
         self.matchTried: bool = False
 
         self.numNouns: int = 0
@@ -45,7 +45,7 @@ class Span:
         return similarity
 
     def get_match_char(self) -> str:
-        if self.match: return self.match.visualisationChar
+        if self.matches: return self.matches[0].match.visualisationChar  # TODO which match
         else: return "?"
 
     def get_all_spans(self) -> list['Span']:
@@ -104,7 +104,5 @@ class Span:
 
         if len(new_spans_t) == 1:
             return False  # Didn't split, it's the same!
-
-        print(self.span, "split into:", self.children)
 
         return True

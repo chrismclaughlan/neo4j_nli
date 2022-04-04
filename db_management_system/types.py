@@ -34,6 +34,11 @@ class Command:
             "as_prop": "SUM",
         },
         {
+            "text": "how much",
+            "as_node": "COUNT",
+            "as_prop": "SUM",
+        },
+        {
             "text": "highest",
             "as_node": "ORDER BY % DESC",
             "as_prop": "TODO",
@@ -152,3 +157,17 @@ class Relationship(BaseClass):
         #
         # return f"({self.nodeSource})-[:{self.type}{props}]->({self.nodeTarget})"
         return f"({self.type})"
+
+
+class Match:
+    def __init__(self,
+                 match: Union[Command, Node, Property, Parameter, Relationship],
+                 confidence: float):
+        self.match: Union[Command, Node, Property, Parameter, Relationship] = match
+        self.confidence: float = confidence
+
+    def __str__(self):
+        return f"{self.match} <> {self.confidence}"
+
+    def __repr__(self):
+        return f"{self.match} <> {self.confidence}"

@@ -29,16 +29,32 @@ class Sentence:
             for chunk in sentence_in_chunks:
                 self.spans.append(Span(chunk))
 
+            # TODO ignore punctuation! Eg. "... ?" will get appended right now!
             trailing_span = self.doc[self.spans[-1].span[-1].i+1:]
             if trailing_span:
-                print("Appending trailing span:", trailing_span)
-                self.spans.append(Span(trailing_span))
+                last_span = self.doc[self.spans[-1].span[0].i:]
+                self.spans[-1] = Span(last_span)
+
+            starting_span = self.doc[:self.spans[0].span[0].i]
+            if starting_span:
+                new_span = self.doc[0:self.spans[0].span[-1].i+1]
+                self.spans = [Span(new_span)] + self.spans[1:]
+
+            # trailing_span = self.doc[self.spans[-1].span[-1].i+1:]
+            # if trailing_span:
+            #     print("Appending trailing span:", trailing_span)
+            #     self.spans.append(Span(trailing_span))
+            #
+            # starting_span = self.doc[:self.spans[0].span[0].i]
+            # print("starting_span", starting_span)
+            # if starting_span:
+            #     self.spans = [Span(starting_span)] + self.spans
 
         else:
             # No noun chunks, make just one big span!
             self.spans = [Span(doc[::])]
 
-    def get_all_spans(self) -> list[Span]:
+    def get_all_span_leaves(self) -> list[Span]:
         all_spans = []
 
         assert(len(self.spans) > 0)
@@ -54,7 +70,7 @@ class Sentence:
         """Visualise sentence and it's components"""
         string = self.doc.text + "\n"
 
-        all_spans = self.get_all_spans()
+        all_spans = self.get_all_span_leaves()
 
         for i, s in enumerate(all_spans):
             string += str(i) + ("_" * (len(s.span.text) - 1)) + " "
