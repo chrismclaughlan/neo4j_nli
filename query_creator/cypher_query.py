@@ -192,8 +192,7 @@ class CypherQuery:
 
 
 class NewCypherComponent:
-    def __init__(self, match: Match, variable_name: str, command: Union[Command, None] = None):
-        self.variableName: str = variable_name
+    def __init__(self, match: Match, command: Union[Command, None] = None):
         self.match: Match = match
         self.command: Union[Command, None] = command
         self.node = None
@@ -212,26 +211,25 @@ class NewCypherComponent:
             raise Exception("Error creating CypherComponent: Could not find match for", match)
 
     def __repr__(self):
+        #return str(self.match.match)
         instance = self.match.match
-        if self.match_type == Node:
-            return f"({self.variableName}:{self.node.label})"
-        elif self.match_type == Property:
-            return f"({self.variableName}:{self.node.label})"
+        if self.match_type == Node or self.match_type == Property:
+            return str(self.node)
         elif self.match_type == Parameter:
-            props = f"{instance.parent.name}: '{instance.value}'"
-            return f"({self.variableName}:{self.node.label} {{{props}}})"
+            #return str(instance)
+            return f"{self.node} WHERE {self.node.variableName}.{instance.parent.name} =~ '(?i){instance.value}'"
         return ""
         #raise Exception("Error creating CypherComponent: Could not find match for", type(instance))
 
 
 def get_node(match: Match) -> Union[Node, None]:
     instance = match.match
-    if isinstance(match.match, Node):
-        return match.match
-    elif isinstance(match.match, Property):
-        return match.match.parent
-    elif isinstance(match.match, Parameter):
-        return match.match.parent.parent
+    if isinstance(instance, Node):
+        return instance
+    elif isinstance(instance, Property):
+        return instance.parent
+    elif isinstance(instance, Parameter):
+        return instance.parent.parent
     return None
 
 
@@ -255,72 +253,62 @@ class NewCypherQuery:
             instance = match.match
             if isinstance(instance, Command):
                 first_command = instance
-            elif isinstance(instance, Node) or isinstance(instance, Property):
+            #elif isinstance(instance, Node) or isinstance(instance, Property):
+            else:
                 if first_match is None:
                     first_match = match
 
                 if first_command is not None:
-                    return NewCypherComponent(match, "a", first_command)
+                    return NewCypherComponent(match, first_command)
 
         # If no command found, return the first Node / Property that was found
         if first_match:
-            return NewCypherComponent(first_match, "a")
+            return NewCypherComponent(first_match)
 
         # If no Node / Property found, no target found!
         return None
 
     def construct_query(self) -> str:
-        # alphabet excluding a (a is target variable name)
-        alphabet = ["b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
-                    "u", "v", "w", "x", "y", "z"]
-
         spans: list[Span] = self.sentence.get_all_span_leaves()
         matches: list[Union[Match, None]] = [s.get_most_confident_match() for s in spans]
 
+        # 1. Find target we are searching for! eg. Match ( ? ) ... RETURN ?
         target: Union[NewCypherComponent, None] = self.get_target(matches)
         if target is None:
             raise Exception("Cannot create CypherQuery: No target found in sentence!")
 
-
-        # TODO add unique id to each node/relationship for naming in query? (eg: Category -> aab) ?
 
         components: list[NewCypherComponent] = []  # Excluding target!
         for match in matches:
             if match is None or match == target.match or isinstance(match.match, Command):
                 continue
 
-            # TODO tmp fix for node
-            node = get_node(match)
-            if node and node == target.node:
-                components.append(NewCypherComponent(match, "a"))
-            else:
-                components.append(NewCypherComponent(match, alphabet.pop()))  # TODO commands for other components!
+            components.append(NewCypherComponent(match))  # TODO commands for other components!
 
         # TODO Find longest match in components, reduce duplicate lines!
         # TODO .is_relationship_between(..., ...) !!!!
 
-        target_s: str = str(target)
         components_s: str = ""
         for comp in components:
             if comp.node == target.node:
                 components_s += "\nMATCH " + str(comp)
             else:
-                components_s += "\nMATCH " + target_s + "--" + str(comp)
+                components_s += "\nMATCH " + str(target.node) + "--" + str(comp)
 
         if target.command:
             if target.match_type == Property:
                 command_name = str(target.command.cypher_dict["as_prop"])
                 prop_name: str = target.match.match.parent.name
-                command_target = f"a.{prop_name}"
+                command_target = f"{target.node.variableName}.{prop_name}"
             else:
                 command_name = str(target.command.cypher_dict["as_node"])
-                command_target = "a"
+                command_target = target.node.variableName
 
             return_s = f"{command_name}({command_target})"
         else:
-            return_s = "a"
+            return_s = target.node.variableName
 
-        return f"MATCH {target_s} {components_s} \nRETURN {return_s}"
+        return f"MATCH {str(target)} {components_s} \nRETURN {return_s}"
 
 
 # For debugging and testing purposes

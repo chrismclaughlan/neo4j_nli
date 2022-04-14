@@ -7,6 +7,11 @@ from processing import process_text
 from config import nlp
 
 
+VARIABLE_NAMES = [
+    "aa", "bb", "cc", "dd"
+]
+
+
 def create_names_readable(text: str) -> spacy_Doc:
     name_readable = ""
     for i, token in enumerate(process_text(text)):
@@ -72,9 +77,10 @@ class Property:
         self.namesReadable: spacy_Doc = create_names_readable(name)
 
     def __str__(self):
-        if isinstance(self.parent, Node):
-            return f"({self.parent.label} {{{self.name}: '?'}})"
-        return self.name  # TODO relationships
+        return str(self.parent)
+        # if isinstance(self.parent, Node):
+        #     return f"({self.parent.label} {{{self.name}: '?'}})"
+        # return self.name  # TODO relationships
 
     def __repr__(self): return self.name
 
@@ -91,16 +97,16 @@ class Parameter:
 
     def __str__(self):
         if isinstance(self.parent.parent, Node):
-            return f"({self.parent.parent.label} {{{self.parent.name}: '{self.value}'}})"
+            node = f"{self.parent.parent.variableName}:{self.parent.parent.label}"
+            return f"({node} {{{self.parent.name}: '{self.value}'}})"
         return self.value  # TODO relationships
-
-    def __repr__(self): return self.value
 
 
 class BaseClass:
-    def __init__(self, name: str, props: list[Property] = None):
+    def __init__(self, name: str, variable_name: str, props: list[Property] = None):
         self.properties = props if props is not None else []  # List of strings
         self.namesReadable = create_names_readable(name)
+        self.variableName = variable_name
 
     def add_property(self, property_name: str) -> None:
         _property = Property(property_name, self)
@@ -115,9 +121,9 @@ class BaseClass:
 
 
 class Node(BaseClass):
-    def __init__(self, label: str, props: list[str] = None):
+    def __init__(self, label: str, variable_name: str, props: list[str] = None):
         self.label = label
-        super().__init__(label, props)
+        super().__init__(label, variable_name, props)
         self.visualisationChar = "N"
 
     def __eq__(self, other):
@@ -132,13 +138,13 @@ class Node(BaseClass):
         # props = props[:-2]
         #
         # return "(" + self.label + " {" + props + "})"
-        return f"({self.label})"
+        return f"({self.variableName}:{self.label})"
 
 
 class Relationship(BaseClass):
-    def __init__(self, type: str, source: str, target: str, props: list[str] = None):
+    def __init__(self, type: str, variable_name: str, source: str, target: str, props: list[str] = None):
         self.type = type
-        super().__init__(type, props)
+        super().__init__(type, variable_name, props)
         self.visualisationChar = "R"
         
         self.nodeSource = source
@@ -168,7 +174,7 @@ class Relationship(BaseClass):
         # props = " {" + props[:-2] + "}"
         #
         # return f"({self.nodeSource})-[:{self.type}{props}]->({self.nodeTarget})"
-        return f"({self.type})"
+        return f"[{self.variableName}:{self.type}]"
 
 
 # TODO base class for all types/matches?

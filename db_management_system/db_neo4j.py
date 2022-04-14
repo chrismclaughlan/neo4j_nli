@@ -9,18 +9,30 @@ from db_management_system.types import Node, Relationship
 from neo4j.exceptions import ServiceUnavailable, CypherSyntaxError
 
 
+ALPHABET = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"]
+
+
+def get_variable_name(number_of_existing_variable_names):
+    n = number_of_existing_variable_names
+    iterations_alphabet = n // 26
+    alphabet_index = n % 26
+    return ALPHABET[alphabet_index] * (iterations_alphabet + 1)
+
+
 class Schema:
     def __init__(self, nodes: Node = None, relationships: Relationship = None):
         self.nodes = nodes if nodes is not None else []
         self.relationships = relationships if relationships is not None else []
 
     def add_node(self, label: str) -> None:
-        node = Node(label)
+        var_name = "n_" + get_variable_name(len(self.nodes))
+        node = Node(label, var_name)
         if node not in self.nodes:
             self.nodes.append(node)
 
     def add_relationship(self, type: str, source: str, target: str, props: list[str] = None) -> None:
-        relationship = Relationship(type, source, target, props)
+        var_name = "r_" + get_variable_name(len(self.relationships))
+        relationship = Relationship(type, var_name, source, target, props)
         if relationship not in self.relationships:
             self.relationships.append(relationship)
 
@@ -75,19 +87,11 @@ class DBNeo4j:
 
         # Parse schema data for node data
         for node_name in set(schema_nodes):
-            self.schema.add_node(label=node_name)
-            # result = session.run(f"MATCH(n:{node_name}) UNWIND keys(n) AS keys RETURN DISTINCT keys")
-            # node_props = [prop["keys"] for prop in result.data()]
-            # node = Node(node_name, node_props)
-            # nodes.append(node)
+            self.schema.add_node(node_name)
 
         # Parse schema data for relationship data
         for each in set(schema_relationships):
-            self.schema.add_relationship(type=each[1], source=each[0], target=each[2])
-            # result = session.run(f"MATCH({node_target})<-[r:{relationship_name}]-({node_source}) UNWIND keys(r) AS keys RETURN DISTINCT keys")
-            # relationship_props = [prop["keys"] for prop in result.data()]
-            # relationship = Relationship(relationship_name, node_source, node_target, relationship_props)
-            # relationships.append(relationship)
+            self.schema.add_relationship(each[1], source=each[0], target=each[2])
 
         if True:  # save query time
             node_type_properties = self.query("CALL db.schema.nodeTypeProperties()")

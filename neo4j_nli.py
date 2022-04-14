@@ -2,6 +2,7 @@ from spacy.tokens.doc import Doc as spacy_Doc
 from spacy.tokens import Token as spacy_Token
 from spacy.tokens.span import Span as spacy_Span
 from typing import Union, Tuple
+import json
 
 from db_management_system.db_neo4j import DBNeo4j
 from db_management_system.types import Match, Command, Node, Relationship, Property, Parameter
@@ -10,6 +11,7 @@ from query_creator.cypher_query import NewCypherQuery
 from components.sentence import Sentence, Span
 from processing import process_text
 import config
+from user_interfaces.ui_tkinter import UITkinter
 
 nlp = config.nlp
 
@@ -252,6 +254,26 @@ END
                         each_span.matches = []
                         break  # TODO !!! TMP FIX FOR DUPLICATES !!!
 
+
+    def translate_text_to_cypher(self, text):
+        doc = process_text(text)
+        sentence = Sentence(doc)
+        self.step_find_node_components(sentence)
+        self.step_reduce_matching_spans(sentence)
+        self.step_find_node_components(sentence)
+
+        # Sentence split, and (most) components identified -> Construct query!
+        cypher_query = NewCypherQuery(self.db, sentence)
+        print(sentence)
+        return cypher_query.construct_query()
+
+    def execute_cypher_query(self, text):
+        return self.db.query(text)
+
+    def save_results(self, text):
+        with open("results.json", "w") as f:
+            json.dump(text, f, indent=4)
+
     def run(self) -> None:
         queries = [
             # Yelp DBMS
@@ -291,5 +313,11 @@ END
 
 if __name__ == "__main__":
     nli = Neo4JNLI("bolt://localhost:7687", "neo4j", "password")  # username = neo4j or username
-    nli.run()
+    # nli.run()
+
+    ui = UITkinter(fn_translate=nli.translate_text_to_cypher,
+                   fn_execute=nli.execute_cypher_query,
+                   fn_save=nli.save_results)
+    ui.run()
+    ui.close()
     nli.close()
