@@ -37,6 +37,7 @@ class Span:
 
         if self.span and self.span.vector_norm and doc and doc.vector_norm:
             similarity = self.span.similarity(doc)
+            #print(self.span, doc, similarity)
         else:
             #print("Cannot find similarity, either does not have a vector norm!", self, doc)
             # TODO also check if exactly sub-string?
@@ -47,6 +48,11 @@ class Span:
     def get_match_char(self) -> str:
         if self.matches: return self.matches[0].match.visualisationChar  # TODO which match
         else: return "?"
+
+    def get_most_confident_match(self):
+        if not self.matches:
+            return None
+        return sorted(self.matches, key=lambda match: match.confidence)[0]
 
     def get_all_spans(self) -> list['Span']:
         """Returns itself if no children, otherwise return children"""

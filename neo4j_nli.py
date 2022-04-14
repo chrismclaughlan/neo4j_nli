@@ -6,7 +6,7 @@ from typing import Union, Tuple
 from db_management_system.db_neo4j import DBNeo4j
 from db_management_system.types import Match, Command, Node, Relationship, Property, Parameter
 #from query_creator.cypher_query import CypherQuery
-from query_creator.cypher_query_wip import CypherQuery
+from query_creator.cypher_query import NewCypherQuery
 from components.sentence import Sentence, Span
 from processing import process_text
 import config
@@ -20,6 +20,13 @@ NOUN_SIMILARITY_THRESHOLD = 0.7
 class Neo4JNLI:
     def __init__(self, database_uri: str, database_username: str, database_password: str):
         self.db = DBNeo4j(database_uri, database_username, database_password)
+
+        for each in self.db.schema.nodes:
+            print(each)
+        for each in self.db.schema.relationships:
+            print(each)
+
+
         #self.db = None  # to speed up init phase
 
     def find_matches(self, target_span: Span, target_list: list[Union[Node, Relationship]]) \
@@ -140,6 +147,8 @@ END
             # Get all sub-spans
             all_spans = sentence.get_all_span_leaves()
 
+            print(iteration_no, all_spans)
+
             did_change = False
             for each in all_spans:
                 # If match or failed to find a match, skip and leave for later evaluation (relationships...)
@@ -243,19 +252,21 @@ END
                         each_span.matches = []
                         break  # TODO !!! TMP FIX FOR DUPLICATES !!!
 
-
     def run(self) -> None:
         queries = [
-            "How many Cities?",
-            "City",
+            # Yelp DBMS
+            # "How many Cities?",
+            # "City",
             "How many Businesses that are Breweries are in Phoenix?",
-            "How many stars does Mother Bunch Brewing have?",
-            "How many businesses are in the category Breweries?",
+            # "How many stars does Mother Bunch Brewing have?",
+            #"businesses in the category Breweries",
 
+            # Raw Data
             # "On #2018/01/01,01:40:00 how much wind power did we produce?",
             # "How much wind speed on #2018/01/01,01:40:00?",
             # "Named individuals that have wind direction",
-            # "How much wind speed on date #2018/01/01,01:40:00?",
+            # "How much wind speed on date #2018/01/01,01:40:00",
+            # "Get Irradiance on date #2018/01/01,01:40:00"
         ]
 
         while queries:
@@ -267,8 +278,12 @@ END
             self.step_find_node_components(sentence)
 
             # Sentence split, and (most) components identified -> Construct query!
-            cypher_query = CypherQuery(sentence)
+            cypher_query = NewCypherQuery(self.db, sentence)
             print(sentence)
+            query = cypher_query.construct_query()
+            print(query)
+            results = self.db.query(query)
+            print(results)
 
     def close(self) -> None:
         if self.db: self.db.close()

@@ -3,6 +3,8 @@ import subprocess, sys
 
 SPACY_MODEL_PIPELINE = "en_core_web_lg"
 
+print("Loading spacy language model", SPACY_MODEL_PIPELINE)
+
 try:
     nlp = spacy.load(SPACY_MODEL_PIPELINE)
 except OSError as e:

@@ -65,10 +65,10 @@ class Command:
 
 
 class Property:
-    def __init__(self, name: str, parent):
-        self.name = name
-        self.parent = parent
-        self.visualisationChar = "P"
+    def __init__(self, name: str, parent: Union['Node', 'Relationship']):
+        self.name: str = name
+        self.parent: Node = parent
+        self.visualisationChar: str = "P"
         self.namesReadable: spacy_Doc = create_names_readable(name)
 
     def __str__(self):
@@ -144,6 +144,18 @@ class Relationship(BaseClass):
         self.nodeSource = source
         self.nodeTarget = target
 
+    def is_relationship_between(self, a: Union[Node, Property], b: Union[Node, Property]) \
+        -> str:
+        """If (first)->(second) return first; if (first)<-(second) return second; else None"""
+        node_a: Node = a if isinstance(a, Node) else a.parent
+        node_b: Node = b if isinstance(b, Node) else b.parent
+
+        if self.nodeSource == node_a.label and self.nodeTarget == node_b.label:
+            return "a"
+        elif self.nodeSource == node_b.label and self.nodeTarget == node_a.label:
+            return "b"
+        return ""
+
     def __eq__(self, other):
         return isinstance(other, Relationship) and self.type == other.type
 
@@ -159,6 +171,7 @@ class Relationship(BaseClass):
         return f"({self.type})"
 
 
+# TODO base class for all types/matches?
 class Match:
     def __init__(self,
                  match: Union[Command, Node, Property, Parameter, Relationship],
