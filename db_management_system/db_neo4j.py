@@ -7,7 +7,7 @@ from exception import Neo4jNLIException
 from db_management_system.types import Node, Relationship
 
 from neo4j.exceptions import ServiceUnavailable, CypherSyntaxError
-
+from timeit import default_timer as timer
 
 ALPHABET = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"]
 
@@ -119,10 +119,17 @@ class DBNeo4j:
         if not self.__driver:
             raise Exception("No driver initialised!")
 
-        session, result = None, None
+        session, data = None, None
         try:
             session = self.__driver.session()
-            result = session.run(query_text, parameters=parameters).data()
+
+            print("DBNeo4j - Executing query", "\"" + query_text[:50] + "...\" with params", parameters)
+            start = timer()
+            result = session.run(query_text, parameters=parameters)
+            data = result.data()
+            end = timer()
+            print("          Took", end - start, "seconds")  # Time in seconds, e.g. 5.38091952400282
+
         except ServiceUnavailable as e:
             raise Neo4jNLIException("Service Unavailable", is_fatal=False, exception=e)
         except CypherSyntaxError as e:
@@ -131,7 +138,7 @@ class DBNeo4j:
             if session:
                 session.close()
 
-        return result
+        return data
 
     def close(self) -> None:
         if not self.__driver:

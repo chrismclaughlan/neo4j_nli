@@ -160,7 +160,7 @@ class UITkinter:
         # two.grid(column=2, row=row, stick=tk.W)
 
     def btn_execute(self, *args):
-        self.tk_root_2.destroy()
+        #self.tk_root_2.destroy()
 
         self.cypher_results_entry.delete(1.0, tk.END)
 

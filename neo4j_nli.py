@@ -105,16 +105,11 @@ class Neo4JNLI:
         matches: list[Parameter] = []
 
         regex = f"(?i)#*{parameter}"
-        query = f"""
-MATCH (m) WHERE any(key IN keys(m) WHERE m[key] =~ $regex)
-RETURN DISTINCT REDUCE 
-(values = [], key IN keys(m) | 
-CASE
-WHEN m[key] =~ $regex THEN values + key
-ELSE values
-END
-) AS property_names, labels(m) AS node_labels
-        """
+        query = "MATCH (m) WHERE any(key IN keys(m) WHERE m[key] =~ $regex) " \
+                "RETURN DISTINCT REDUCE (" \
+                    "values = [], key IN keys(m) | " \
+                    "CASE WHEN m[key] =~ $regex THEN values + key ELSE values END" \
+                ") AS property_names, labels(m) AS node_labels"
         result = self.db.query(query, {"regex": regex})
         if len(result) == 0:
             return matches
