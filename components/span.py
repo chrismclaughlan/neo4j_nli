@@ -49,10 +49,10 @@ class Span:
         if self.matches: return self.matches[0].match.visualisationChar  # TODO which match
         else: return "?"
 
-    def get_most_confident_match(self):
+    def sort_by_most_confident_match(self):
         if not self.matches:
             return None
-        return sorted(self.matches, key=lambda match: match.confidence)[0]
+        self.matches.sort(key=lambda match: match.confidence)
 
     def get_all_spans(self) -> list['Span']:
         """Returns itself if no children, otherwise return children"""

@@ -264,8 +264,13 @@ END
 
         # Sentence split, and (most) components identified -> Construct query!
         cypher_query = NewCypherQuery(self.db, sentence)
-        print(sentence)
-        return cypher_query.construct_query()
+        return cypher_query
+        #
+        # s = sentence.get_all_span_leaves()
+        # for each in s:
+        #     print(each.matches)
+        # print(sentence)
+        # return cypher_query.construct_query()
 
     def execute_cypher_query(self, text):
         return self.db.query(text)

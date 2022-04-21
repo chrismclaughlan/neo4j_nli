@@ -186,7 +186,7 @@ class Match:
         self.confidence: float = confidence
 
     def __str__(self):
-        return f"{self.match} <> {self.confidence}"
+        return f"{self.match} <> {round(self.confidence, 3)}"
 
     def __repr__(self):
-        return f"{self.match} <> {self.confidence}"
+        return f"{self.match} <> {round(self.confidence, 3)}"
