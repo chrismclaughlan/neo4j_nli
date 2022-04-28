@@ -2,6 +2,7 @@ import tkinter
 import tkinter as tk
 from typing import Callable
 from functools import partial
+from timeit import default_timer as timer
 
 
 class UITkinter:
@@ -86,29 +87,42 @@ class UITkinter:
             column=4, row=row, sticky=tk.E, padx=5, pady=5)
         # self.cypher_results_entry.bind("<Return>", self.btn_save)
 
+    def opt_toggle_match(self, *args):
+        for s in self.cypherQuery.sentence.get_all_span_leaves():
+            if s == args[0]:
+                s.ignoreMatches = not s.ignoreMatches
+                break
+        cypher_query_text = self.cypherQuery.construct_query(sort=False)
+        self.cypher_query_entry.delete(1.0, tk.END)
+        self.cypher_query_entry.insert(1.0, cypher_query_text)
+
     def opt_adjust_match(self, *args):
         for s in self.cypherQuery.sentence.get_all_span_leaves():
             if s == args[0]:
                 # Place arg[1] to front of s.matches
                 if s.matches[0] == args[1]: break
-                copy_ = s.matches[::]
                 new_matches = s.matches[::]
                 new_matches.remove(args[1])
                 new_matches = [args[1]] + new_matches
                 s.matches = new_matches
                 break
-        print(args)
         cypher_query_text = self.cypherQuery.construct_query(sort=False)
         self.cypher_query_entry.delete(1.0, tk.END)
         self.cypher_query_entry.insert(1.0, cypher_query_text)
 
-
     def btn_translate(self, *args):
+        print("UITKinter - Translating Query")
         self.cypher_results_entry.delete(1.0, tk.END)
 
         text = self.text_query_entry.get()
+
+        start = timer()
         self.cypherQuery = self.fn_translate(text)
         cypher_query_text = self.cypherQuery.construct_query()
+        end = timer()
+        print("UITKinter - Translating Query took", end - start, "seconds")
+
+
         self.cypher_query_entry.delete(1.0, tk.END)
         self.cypher_query_entry.insert(1.0, cypher_query_text)
 
@@ -117,10 +131,8 @@ class UITkinter:
             self.tk_root_2.destroy()
         self.tk_root_2 = tkinter.Toplevel(self.tk_root)
         row = 0
-        one = tk.Label(self.tk_root_2, text="""
-        Key Concepts identified in sentence.
-        Use dropdowns to adjust matching db components.
-                """)
+        one = tk.Label(self.tk_root_2, text="Key Concepts identified in sentence. "
+                                            "Use dropdowns to adjust matching db components.")
         one.grid(row=row, column=0, columnspan=3)
 
         spans = self.cypherQuery.sentence.get_all_span_leaves()
@@ -137,6 +149,8 @@ class UITkinter:
                 #options = options[1:]
             two = tk.OptionMenu(self.tk_root_2, variable, *options, command=partial(self.opt_adjust_match, s))
             two.grid(column=2, row=row, stick=tk.W)
+            three = tk.Button(self.tk_root_2, text="Toggle", width=10, command=partial(self.opt_toggle_match, s))
+            three.grid(column=3, row=row, stick=tk.W)
 
         #
         # # Text Interpretation
@@ -160,6 +174,7 @@ class UITkinter:
         # two.grid(column=2, row=row, stick=tk.W)
 
     def btn_execute(self, *args):
+        print("UITKinter - Executing Query")
         #self.tk_root_2.destroy()
 
         self.cypher_results_entry.delete(1.0, tk.END)
@@ -171,11 +186,13 @@ class UITkinter:
         self.cypher_results_entry.insert(1.0, cypher_results)
 
     def btn_save(self, *args):
+        print("UITKinter - Saving Results")
         text = self.cypher_results_entry.get(1.0, tk.END)
 
         self.fn_save(text)
 
     def run(self):
+        print("UITKinter - Run")
         self.tk_root.mainloop()
 
     def close(self):

@@ -23,6 +23,8 @@ class Span:
             if token.pos_ in SPACY_NOUN_POS_TAGS:
                 self.numNouns += 1
 
+        self.ignoreMatches = False
+
     def __len__(self):
         return len(self.span)
 
@@ -36,8 +38,14 @@ class Span:
         similarity = 0.0
 
         if self.span and self.span.vector_norm and doc and doc.vector_norm:
-            similarity = self.span.similarity(doc)
-            #print(self.span, doc, similarity)
+            if len(self.span) == 1 and self.span[0].is_stop:
+                similarity = 0
+            else:
+                similarity = self.span.similarity(doc)
+
+                if len(self.span) == 1 and self.span.text.lower() in doc.text.lower():
+                    similarity += 0.5
+                #print(self.span, doc, similarity)
         else:
             #print("Cannot find similarity, either does not have a vector norm!", self, doc)
             # TODO also check if exactly sub-string?

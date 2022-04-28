@@ -162,6 +162,9 @@ class Relationship(BaseClass):
             return "b"
         return ""
 
+    def explaination(self):
+        return f"({self.nodeSource})-[{self.type}]->({self.nodeTarget})"
+
     def __eq__(self, other):
         return isinstance(other, Relationship) and self.type == other.type
 

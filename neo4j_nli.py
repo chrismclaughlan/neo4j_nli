@@ -23,13 +23,12 @@ class Neo4JNLI:
     def __init__(self, database_uri: str, database_username: str, database_password: str):
         self.db = DBNeo4j(database_uri, database_username, database_password)
 
+        print("Neo4jNLI - Found", len(self.db.schema.nodes), "Nodes in DB Schema")
         for each in self.db.schema.nodes:
-            print(each)
+            print("          ", each)
+        print("Neo4jNLI - Found", len(self.db.schema.relationships), "Relationships in DB Schema")
         for each in self.db.schema.relationships:
-            print(each)
-
-
-        #self.db = None  # to speed up init phase
+            print("          ", each.explaination())
 
     def find_matches(self, target_span: Span, target_list: list[Union[Node, Relationship]]) \
             -> list[Match]:
@@ -47,32 +46,36 @@ class Neo4JNLI:
         similarity_matrix = []
         for each in target_list:
             similarity = target_span.get_similarity(each.namesReadable)
+
+            print(similarity, target_span, each.namesReadable)
             # TODO handle empty vectors! eg. similarity = 0
-            #print(similarity, target_span, each.namesReadable)
             if similarity >= NOUN_SIMILARITY_THRESHOLD:
-                similarity_matrix.append(
-                    {"similarity": similarity, "match": each, "match_prop": None}
-                )
+                # similarity_matrix.append(
+                #     {"similarity": similarity, "match": each, "match_prop": None}
+                # )
+                matches.append(Match(each, similarity))
 
             for prop in each.properties:
                 similarity = target_span.get_similarity(prop.namesReadable)
                 if similarity >= NOUN_SIMILARITY_THRESHOLD:
-                    similarity_matrix.append(
-                        {"similarity": similarity, "match": each, "match_prop": prop}
-                    )
+                    print(similarity, target_span, prop.namesReadable)
+                    # similarity_matrix.append(
+                    #     {"similarity": similarity, "match": each, "match_prop": prop}
+                    # )
+                    matches.append(Match(prop, similarity))
 
-        if len(similarity_matrix) > 0:
-            similarity_matrix.sort(key=lambda dic: dic["similarity"], reverse=True)
-
-            match = similarity_matrix[0]
-            if match["match_prop"]:
-                matches.append(
-                    Match(match["match_prop"], match["similarity"])
-                )
-            elif match["match"]:
-                matches.append(
-                    Match(match["match"], match["similarity"])
-                )
+        # if len(similarity_matrix) > 0:
+        #     similarity_matrix.sort(key=lambda dic: dic["similarity"], reverse=True)
+        #
+        #     match = similarity_matrix[0]
+        #     if match["match_prop"]:
+        #         matches.append(
+        #             Match(match["match_prop"], match["similarity"])
+        #         )
+        #     elif match["match"]:
+        #         matches.append(
+        #             Match(match["match"], match["similarity"])
+        #         )
             # for each in similarity_matrix:
             #     if each["match_prop"]:
             #         matches.append(
@@ -84,11 +87,17 @@ class Neo4JNLI:
             #         )
 
         # 3. Check if matching a Parameter
-        parameters = self.find_parameter_in_db(target_span.span.text)
-        for each in parameters:
-            matches.append(
-                Match(each, confidence=1.0)
-            )
+        # if len(target_span.span) == 1 and not target_span.span[0].is_stop:
+        if len(target_span.span) == 1 and target_span.span[0].is_stop:
+            pass
+        else:
+            parameters = self.find_parameter_in_db(target_span.span.text)
+            for each in parameters:
+                matches.append(
+                    Match(each, confidence=10.0)
+                )
+
+        matches.sort(key=lambda m: m.confidence, reverse=True)
 
         return matches
 
@@ -100,11 +109,10 @@ class Neo4JNLI:
 
     def find_parameter_in_db(self, parameter: str) -> list[Parameter]:
         """Value is string"""
-        # TODO handle special regex characters! Escape parameter!
         # TODO REGEX find data after first # occured. Maybe add option to interface for users to provide regex?
         matches: list[Parameter] = []
 
-        regex = f"(?i)#*{parameter}"
+        regex = DBNeo4j.create_regex_param(parameter)
         query = "MATCH (m) WHERE any(key IN keys(m) WHERE m[key] =~ $regex) " \
                 "RETURN DISTINCT REDUCE (" \
                     "values = [], key IN keys(m) | " \
@@ -154,16 +162,26 @@ class Neo4JNLI:
                     continue
                 each.matchTried = True
 
-                if each.numNouns < 1:
-                    command = self.find_command(each.span)
-                    if command:
-                        each.matches = [Match(command, confidence=1.0)]
-                        continue
+                command = self.find_command(each.span)
+                if command:
+                    each.matches = [Match(command, confidence=1.0)]
+                    continue
                 else:
                     matches = self.find_matches(each, self.db.schema.nodes)
                     if matches:
                         each.matches = matches
                         continue
+
+                # if each.numNouns < 1:
+                #     command = self.find_command(each.span)
+                #     if command:
+                #         each.matches = [Match(command, confidence=1.0)]
+                #         continue
+                # else:
+                #     matches = self.find_matches(each, self.db.schema.nodes)
+                #     if matches:
+                #         each.matches = matches
+                #         continue
 
                 did_split = each.split()
                 if did_split:
@@ -256,6 +274,8 @@ class Neo4JNLI:
         self.step_find_node_components(sentence)
         self.step_reduce_matching_spans(sentence)
         self.step_find_node_components(sentence)
+
+        print(sentence)
 
         # Sentence split, and (most) components identified -> Construct query!
         cypher_query = NewCypherQuery(self.db, sentence)

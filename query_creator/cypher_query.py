@@ -31,7 +31,8 @@ class NewCypherComponent:
             return str(self.node)
         elif self.match_type == Parameter:
             #return str(instance)
-            return f"{self.node} WHERE {self.node.variableName}.{instance.parent.name} =~ '(?i){instance.value}'"
+            regex = DBNeo4j.create_regex_param(instance.value).replace("\\", "\\\\")    # TODO: Why do we need this? Why does it sometimes have single "\" and then "\\"?
+            return f"{self.node} WHERE {self.node.variableName}.{instance.parent.name} =~ '{regex}'"
         return ""
         #raise Exception("Error creating CypherComponent: Could not find match for", type(instance))
 
@@ -87,7 +88,7 @@ class NewCypherQuery:
         spans: list[Span] = self.sentence.get_all_span_leaves()
         matches: list[Union[Match, None]] = []
         for s in spans:
-            if not s.matches: continue
+            if not s.matches or s.ignoreMatches: continue
             if sort:
                 s.sort_by_most_confident_match()
             matches.append(s.matches[0])
@@ -106,14 +107,24 @@ class NewCypherQuery:
             components.append(NewCypherComponent(match))  # TODO commands for other components!
 
         # TODO Find longest match in components, reduce duplicate lines!
-        # TODO .is_relationship_between(..., ...) !!!!
 
         components_s: str = ""
         for comp in components:
             if comp.node == target.node:
                 components_s += "\nMATCH " + str(comp)
             else:
-                components_s += "\nMATCH " + str(target.node) + "--" + str(comp)
+                relationship = None
+                for rela in self.db.schema.relationships:
+                    if rela.is_relationship_between(target.node, comp.node):
+                        relationship = rela
+                        break
+                print(relationship)
+
+                if relationship is not None:
+                    components_s += "\nMATCH " + str(target.node) + "-" + str(relationship) + "-" + str(comp)
+                else:
+                    # TODO improve reliability and performance in relationships ... eg. [*1...3] ...
+                    components_s += "\nMATCH " + str(target.node) + "-[*1..3]-" + str(comp)
 
         if target.command:
             if target.match_type == Property:
@@ -128,7 +139,7 @@ class NewCypherQuery:
         else:
             return_s = target.node.variableName
 
-        return f"MATCH {str(target)} {components_s} \nRETURN {return_s}"
+        return f"MATCH {str(target)} {components_s} \nRETURN {return_s} AS results"
 
 
 # For debugging and testing purposes

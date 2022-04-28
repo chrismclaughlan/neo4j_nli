@@ -8,6 +8,7 @@ from db_management_system.types import Node, Relationship
 
 from neo4j.exceptions import ServiceUnavailable, CypherSyntaxError
 from timeit import default_timer as timer
+import re  # Regular Expression Operations
 
 ALPHABET = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"]
 
@@ -66,6 +67,10 @@ class DBNeo4j:
         except Neo4jNLIException as e:
             raise e
 
+    @staticmethod
+    def create_regex_param(text: str) -> str:
+        return f"(?i)#?({re.escape(text)})"
+
     def __str__(self):
         return f"neo4j database uri: {self.uri} username: '{self.username}'"
 
@@ -74,6 +79,7 @@ class DBNeo4j:
         containing relationship tuples formatted as (node_from, relationship_between, node_to)."""
         if not self.__driver:
             raise Neo4jNLIException("No driver initialised!")
+        print("DBNeo4j - Refreshing Schema")
 
         self.schema = Schema()
         session = self.__driver.session()
