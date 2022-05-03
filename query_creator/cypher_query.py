@@ -5,12 +5,12 @@ from db_management_system.types import Match, Command, Node, Property, Parameter
 from db_management_system.db_neo4j import DBNeo4j
 
 
-class NewCypherComponent:
+class CypherComponent:
     def __init__(self, match: Match, command: Union[Command, None] = None):
         self.match: Match = match
         self.command: Union[Command, None] = command
         self.node = None
-        self.match_type: Union[Type[Node], Type[Property], Type[Parameter], None] = None
+        self.match_type: Union[Type[Node], Type[Property], Type[Parameter], None] = None  # TODO @getter ?
         # TODO what if relationship?
         if isinstance(match.match, Node):
             self.node = match.match
@@ -24,7 +24,7 @@ class NewCypherComponent:
         else:
             raise Exception("Error creating CypherComponent: Could not find match for", match)
 
-    def __repr__(self):
+    def __str__(self):
         #return str(self.match.match)
         instance = self.match.match
         if self.match_type == Node or self.match_type == Property:
@@ -32,30 +32,31 @@ class NewCypherComponent:
         elif self.match_type == Parameter:
             #return str(instance)
             regex = DBNeo4j.create_regex_param(instance.value).replace("\\", "\\\\")    # TODO: Why do we need this? Why does it sometimes have single "\" and then "\\"?
+            #return f" WHERE {self.node.variableName}.{instance.parent.name} =~ '{regex}'"
             return f"{self.node} WHERE {self.node.variableName}.{instance.parent.name} =~ '{regex}'"
         return ""
         #raise Exception("Error creating CypherComponent: Could not find match for", type(instance))
 
 
-def get_node(match: Match) -> Union[Node, None]:
-    instance = match.match
-    if isinstance(instance, Node):
-        return instance
-    elif isinstance(instance, Property):
-        return instance.parent
-    elif isinstance(instance, Parameter):
-        return instance.parent.parent
-    return None
+# def get_node(match: Match) -> Union[Node, None]:
+#     instance = match.match
+#     if isinstance(instance, Node):
+#         return instance
+#     elif isinstance(instance, Property):
+#         return instance.parent
+#     elif isinstance(instance, Parameter):
+#         return instance.parent.parent
+#     return None
 
 
-class NewCypherQuery:
+class CypherQuery:
     def __init__(self, db: DBNeo4j, sentence: Sentence):
         self.db = db
         self.sentence: Sentence = sentence
         #
         # self.construct_query()
 
-    def get_target(self, matches: list[Match]) -> Union[NewCypherComponent, None]:
+    def get_target(self, matches: list[Match]) -> Union[CypherComponent, None]:
         # Target can only be: Node / Property. (Q: What about Relationship?)
         # Target either follows first command, or if no command, the first Node / Property.
 
@@ -74,11 +75,11 @@ class NewCypherQuery:
                     first_match = match
 
                 if first_command is not None:
-                    return NewCypherComponent(match, first_command)
+                    return CypherComponent(match, first_command)
 
         # If no command found, return the first Node / Property that was found
         if first_match:
-            return NewCypherComponent(first_match)
+            return CypherComponent(first_match)
 
         # If no Node / Property found, no target found!
         return None
@@ -94,17 +95,17 @@ class NewCypherQuery:
             matches.append(s.matches[0])
 
         # 1. Find target we are searching for! eg. Match ( ? ) ... RETURN ?
-        target: Union[NewCypherComponent, None] = self.get_target(matches)
+        target: Union[CypherComponent, None] = self.get_target(matches)
         if target is None:
             raise Exception("Cannot create CypherQuery: No target found in sentence!")
 
 
-        components: list[NewCypherComponent] = []  # Excluding target!
+        components: list[CypherComponent] = []  # Excluding target!
         for match in matches:
             if match is None or match == target.match or isinstance(match.match, Command):
                 continue
 
-            components.append(NewCypherComponent(match))  # TODO commands for other components!
+            components.append(CypherComponent(match))  # TODO commands for other components!
 
         # TODO Find longest match in components, reduce duplicate lines!
 
@@ -113,18 +114,39 @@ class NewCypherQuery:
             if comp.node == target.node:
                 components_s += "\nMATCH " + str(comp)
             else:
-                relationship = None
-                for rela in self.db.schema.relationships:
-                    if rela.is_relationship_between(target.node, comp.node):
-                        relationship = rela
-                        break
-                print(relationship)
+                print("SHORTEST PATH", target.node, comp.node)
 
-                if relationship is not None:
-                    components_s += "\nMATCH " + str(target.node) + "-" + str(relationship) + "-" + str(comp)
+                b = ""
+                if comp.match_type == Parameter:
+                    b = f"{comp.node.label} {{{comp.match.match.parent.name}: '{comp.match.match.value}'}}"
                 else:
-                    # TODO improve reliability and performance in relationships ... eg. [*1...3] ...
+                    b = str(comp.node)
+
+                shortest_path: str = self.db.get_shortest_path(target.node.label, comp.node.label)#b, comp.node.variableName)
+
+                print(shortest_path)
+
+                if shortest_path:
+                    components_s += "\nMATCH " + shortest_path
+                    if comp.match_type == Parameter:
+                        parameter: Parameter = comp.match.match
+                        regex = DBNeo4j.create_regex_param(parameter.value).replace("\\", "\\\\")  # TODO: Why do we need this? Why does it sometimes have single "\" and then "\\"?
+                        components_s += f" WHERE {comp.node.variableName}.{parameter.parent.name} =~ '{regex}'"
+                else:
                     components_s += "\nMATCH " + str(target.node) + "-[*1..3]-" + str(comp)
+
+                # relationship = None
+                # for rela in self.db.schema.relationships:
+                #     if rela.is_relationship_between(target.node, comp.node):
+                #         relationship = rela
+                #         break
+                # print(relationship)
+                #
+                # if relationship is not None:
+                #     components_s += "\nMATCH " + str(target.node) + "-" + str(relationship) + "-" + str(comp)
+                # else:
+                #     # TODO improve reliability and performance in relationships ... eg. [*1...3] ...
+                #     components_s += "\nMATCH " + str(target.node) + "-[*1..3]-" + str(comp)
 
         if target.command:
             if target.match_type == Property:
@@ -173,7 +195,7 @@ if __name__ == "__main__":
 
     db = DBNeo4j("bolt://localhost:7687", "neo4j", "password")
     #cypher_query = CypherQuery(db, sentence)
-    query = NewCypherQuery(db, sentence)
+    query = CypherQuery(db, sentence)
     #b = cypher_query.has_valid_relationships()
 
     cypher = query.construct_query()

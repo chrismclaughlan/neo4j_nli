@@ -90,9 +90,9 @@ class Property:
 
 class Parameter:
     def __init__(self, value: str, parent: Property):
-        self.value = value
-        self.parent = parent
-        self.visualisationChar = "p"
+        self.value: str = value
+        self.parent: Property = parent
+        self.visualisationChar: str = "p"
         #self.namesReadable: spacy_Doc = create_names_readable(value)  # ??
 
     def __str__(self):
@@ -138,17 +138,20 @@ class Node(BaseClass):
         # props = props[:-2]
         #
         # return "(" + self.label + " {" + props + "})"
+        return f"Node(label='{self.label}', variable_name='{self.variableName}', props='{self.properties}')"
+
+    def __str__(self):
         return f"({self.variableName}:{self.label})"
 
 
 class Relationship(BaseClass):
-    def __init__(self, type: str, variable_name: str, source: str, target: str, props: list[str] = None):
+    def __init__(self, type: str, variable_name: str, source_node: str, target_node: str, props: list[str] = None):
         self.type = type
         super().__init__(type, variable_name, props)
         self.visualisationChar = "R"
         
-        self.nodeSource = source
-        self.nodeTarget = target
+        self.nodeSource = source_node
+        self.nodeTarget = target_node
 
     def is_relationship_between(self, a: Union[Node, Property], b: Union[Node, Property]) \
         -> str:
@@ -177,7 +180,15 @@ class Relationship(BaseClass):
         # props = " {" + props[:-2] + "}"
         #
         # return f"({self.nodeSource})-[:{self.type}{props}]->({self.nodeTarget})"
-        return f"[{self.variableName}:{self.type}]"
+        return f"Relationship(" \
+               f"type='{self.type}', " \
+               f"variable_name='{self.variableName}', " \
+               f"source_node='{self.nodeSource}', " \
+               f"target_node='{self.nodeTarget}', " \
+               f"props='{self.properties[3:]}')"
+
+    def __str__(self):
+        return f"[:{self.type}]"
 
 
 # TODO base class for all types/matches?

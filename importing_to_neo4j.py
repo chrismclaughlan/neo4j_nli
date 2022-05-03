@@ -119,5 +119,5 @@ class Neo4j_connection: #neo4jconnection #used to be COnnect2Neo4j
 
 if __name__ == "__main__":
     greeter = Neo4j_connection("bolt://localhost:7687", "neo4j", "password")
-    greeter.uploading_orx(" 'file:///C:/Users/Chris/Documents/03-Bremen/2021-2022/Thesis/ontologies/Mehring4_small' ","neo4j")
+    greeter.uploading_orx(" 'file:///C:/Users/Chris/Documents/03-Bremen/2021-2022/Thesis/ontologies/DSI' ","neo4j")
     greeter.close()

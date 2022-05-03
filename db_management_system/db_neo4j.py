@@ -6,43 +6,42 @@ from exception import Neo4jNLIException
 # from db_management_system.relationships import Relationship
 from db_management_system.types import Node, Relationship
 
-from neo4j.exceptions import ServiceUnavailable, CypherSyntaxError
+from neo4j.exceptions import ServiceUnavailable, CypherSyntaxError, DatabaseError
 from timeit import default_timer as timer
 import re  # Regular Expression Operations
 
 ALPHABET = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"]
-
-
-def get_variable_name(number_of_existing_variable_names):
-    n = number_of_existing_variable_names
-    iterations_alphabet = n // 26
-    alphabet_index = n % 26
-    return ALPHABET[alphabet_index] * (iterations_alphabet + 1)
-
 
 class Schema:
     def __init__(self, nodes: Node = None, relationships: Relationship = None):
         self.nodes = nodes if nodes is not None else []
         self.relationships = relationships if relationships is not None else []
 
+    @staticmethod
+    def get_variable_name(number_of_existing_variable_names):
+        n = number_of_existing_variable_names
+        iterations_alphabet = n // 26
+        alphabet_index = n % 26
+        return ALPHABET[alphabet_index] * (iterations_alphabet + 1)
+
     def add_node(self, label: str) -> None:
-        var_name = "n_" + get_variable_name(len(self.nodes))
+        var_name = "n_" + self.get_variable_name(len(self.nodes))
         node = Node(label, var_name)
         if node not in self.nodes:
             self.nodes.append(node)
 
     def add_relationship(self, type: str, source: str, target: str, props: list[str] = None) -> None:
-        var_name = "r_" + get_variable_name(len(self.relationships))
+        var_name = "r_" + self.get_variable_name(len(self.relationships))
         relationship = Relationship(type, var_name, source, target, props)
         if relationship not in self.relationships:
             self.relationships.append(relationship)
 
-    def get_node(self, label: str) -> Union[Node, None]:
+    def get_node_by_label(self, label: str) -> Union[Node, None]:
         for node in self.nodes:
             if node.label == label: return node
         return None
 
-    def get_relationship(self, type: str) -> Union[Relationship, None]:
+    def get_rela_by_type(self, type: str) -> Union[Relationship, None]:
         for relationship in self.relationships:
             if relationship.type == type: return relationship
         return None
@@ -66,6 +65,64 @@ class DBNeo4j:
             raise Neo4jNLIException("Initialising Neo4j Graph Database Driver", is_fatal=False, exception=e)
         except Neo4jNLIException as e:
             raise e
+
+    def get_shortest_path(self, a: str, b: str) -> str:
+        # TODO clean function up!
+        print("DBNeo4j - Finding the shortest path for", a, "and", b)
+        query_text = f"MATCH (a:{a}) " \
+                f"MATCH (b:{b}), " \
+                f"p = shortestPath((a)-[*1..10]-(b)) " \
+                "WITH p LIMIT 200 " \
+                "RETURN p ORDER BY length(p) LIMIT 1"
+        # query_text = f"MATCH (a:City) " \
+        #         f"OPTIONAL MATCH (b:User), " \
+        #         "p = shortestPath((a)-[*1..10]-(b)) " \
+        #         "WITH p LIMIT 50 " \
+        #         "RETURN p ORDER BY length(p) LIMIT 1"
+
+        print(query_text)
+
+        session = None
+        try:
+            session = self.__driver.session()
+            result = session.run(query_text).single().items()
+        except DatabaseError as e:
+            return ""
+        finally:
+            if session:
+                session.close()
+        path = result[0][1]
+
+        if not path:
+            return ""
+
+        start = path.start_node
+        end = path.end_node
+        print("start", start)
+        for i, each in enumerate(path):
+            print(i, each)
+        print("end", end)
+        #print(result, start, end, path)
+
+        r = f"({list(start.labels)[0]})"
+        for rela in path:
+            node_label = list(rela.nodes[0].labels)[0]
+            r += f"-[:{rela.type}]-({node_label})"
+        print(r)
+
+
+        # Translate to our instances
+        #start_node = self.find_node_by_labels(list(start.labels))
+        start_node: Node = self.schema.get_node_by_label(a)
+        t: str = str(start_node)
+        for i, relationship in enumerate(path):
+            r = self.schema.get_rela_by_type(relationship.type)
+            if i < len(path) - 1:
+                n = self.schema.get_node_by_label(list(relationship.nodes[0].labels)[0])
+            else:
+                n = self.schema.get_node_by_label(b)
+            t+= "-" + str(r) + "-" + str(n)
+        return t
 
     @staticmethod
     def create_regex_param(text: str) -> str:

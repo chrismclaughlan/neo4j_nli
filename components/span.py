@@ -12,13 +12,13 @@ class Span:
 
         self.children: list[Span] = []  # new
 
-        self.spanL: Union[Span, None] = None
-        self.spanR: Union[Span, None] = None
+        # self.spanL: Union[Span, None] = None
+        # self.spanR: Union[Span, None] = None
 
         self.matches: list[Match] = matches if matches else []
-        self.matchTried: bool = False
+        # self.matchTried: bool = False
 
-        self.numNouns: int = 0
+        self.numNouns: int = 0  # TODO @getter?
         for token in span:
             if token.pos_ in SPACY_NOUN_POS_TAGS:
                 self.numNouns += 1

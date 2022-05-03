@@ -7,7 +7,7 @@ import json
 from db_management_system.db_neo4j import DBNeo4j
 from db_management_system.types import Match, Command, Node, Relationship, Property, Parameter
 #from query_creator.cypher_query import CypherQuery
-from query_creator.cypher_query import NewCypherQuery
+from query_creator.cypher_query import CypherQuery
 from components.sentence import Sentence, Span
 from processing import process_text
 import config
@@ -160,7 +160,7 @@ class Neo4JNLI:
                 # ALso, if no nouns present in span, leave for later evaluation (relationships...)
                 if each.matches:# or each.matchTried:
                     continue
-                each.matchTried = True
+                # each.matchTried = True
 
                 command = self.find_command(each.span)
                 if command:
@@ -190,7 +190,7 @@ class Neo4JNLI:
             if not did_change:
                 break
 
-    def step_reduce_matching_spans(self, sentence):
+    def step_reduce_spans(self, sentence) -> None:
         """Reduce spans that contain matches to accurately locate matches within them. Frees
         other words/(spans) in span for context in later steps."""
 
@@ -267,18 +267,17 @@ class Neo4JNLI:
                         each_span.matches = []
                         break  # TODO !!! TMP FIX FOR DUPLICATES !!!
 
-
-    def translate_text_to_cypher(self, text):
+    def translate_text_to_cypher(self, text: str) -> CypherQuery:
         doc = process_text(text)
         sentence = Sentence(doc)
         self.step_find_node_components(sentence)
-        self.step_reduce_matching_spans(sentence)
+        self.step_reduce_spans(sentence)
         self.step_find_node_components(sentence)
 
         print(sentence)
 
         # Sentence split, and (most) components identified -> Construct query!
-        cypher_query = NewCypherQuery(self.db, sentence)
+        cypher_query = CypherQuery(self.db, sentence)
         return cypher_query
         #
         # s = sentence.get_all_span_leaves()
@@ -287,7 +286,7 @@ class Neo4JNLI:
         # print(sentence)
         # return cypher_query.construct_query()
 
-    def execute_cypher_query(self, text):
+    def execute_cypher_query(self, text: str) -> list[dict]:
         return self.db.query(text)
 
     def save_results(self, text):
@@ -316,11 +315,11 @@ class Neo4JNLI:
             doc = process_text(natural_language_query)
             sentence = Sentence(doc)
             self.step_find_node_components(sentence)
-            self.step_reduce_matching_spans(sentence)
+            self.step_reduce_spans(sentence)
             self.step_find_node_components(sentence)
 
             # Sentence split, and (most) components identified -> Construct query!
-            cypher_query = NewCypherQuery(self.db, sentence)
+            cypher_query = CypherQuery(self.db, sentence)
             print(sentence)
             query = cypher_query.construct_query()
             print(query)
